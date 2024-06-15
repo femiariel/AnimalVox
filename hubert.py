@@ -1,4 +1,4 @@
-#Import de toutes les bibliothèques nécessaires au bon fonctionnement du projet
+# Import necessary libraries for the project
 from transformers import AutoTokenizer, AutoFeatureExtractor, AutoModelForCTC
 import torch
 import os
@@ -12,52 +12,79 @@ import gc
 import math
 import gradio as gr
 import sys
-#Chargement du modèle utilisé pour la vectorisation des audios
-bundle= torchaudio.pipelines.HUBERT_BASE
-model= bundle.get_model()
 
+# Load the model used for audio vectorization
+bundle = torchaudio.pipelines.HUBERT_BASE
+model = bundle.get_model()
 
-#variable contenant le chemin vers le fichier animaux.index sur votre ordinateur 
-index_path="/Users/ariel/Downloads/animals.index"
-#lecture du fichier animaux.index
+# Variable containing the path to the animals.index file on your computer
+index_path = "/Users/ariel/Downloads/animals.index"
+# Read the animals.index file
 index = faiss.read_index(index_path)
 
-#variable contenant le chemin vers le fichier noms_animaux.txt
+# Variable containing the path to the noms_animaux.txt file
 chemin_noms_animaux = '/Users/ariel/Downloads/noms_animaux.txt'
 
-#Traitement du fichier noms_animaux.txt pour pouvoir lier les vecteurs contenus dans animals.index aux noms dans noms_animaux.txt
-# Lire le contenu du fichier et le convertir en liste
+# Process the noms_animaux.txt file to link vectors in animals.index to names in noms_animaux.txt
+# Read the file content and convert it to a list
 with open(chemin_noms_animaux, 'r') as fichier:
-    # Utiliser une compréhension de liste pour traiter chaque ligne
+    # Use a list comprehension to process each line
     names = [line.strip().strip("'").strip(",").strip() for line in fichier.readlines()]
 
-
-
-
 def bayes_theorem(df, n_top_vectors=50):
-    # Limite le DataFrame aux n_top_vectors premiers vecteurs
+    """
+    Calculate posterior probabilities using Bayes' theorem.
+
+    This function limits the DataFrame to the top n vectors, calculates the sum of similarities
+    for each category, and computes the posterior probabilities normalized by the total probability.
+
+    Parameters:
+    df (pd.DataFrame): DataFrame containing similarity percentages and categories.
+    n_top_vectors (int): Number of top vectors to consider.
+
+    Returns:
+    dict: Normalized posterior probabilities for each category.
+    """
+    # Limit the DataFrame to the top n vectors
     df_limited = df.head(n_top_vectors)
-    # Récupère les catégories uniques et initialise le dictionnaire des probabilités a posteriori
+    # Get unique categories and initialize the posterior probabilities dictionary
     categories = df_limited['names_normalized'].unique()
     probas_a_posteriori = {categorie: 0 for categorie in categories}
-    # Calcul des probabilités a priori uniformes
+    # Calculate uniform prior probabilities
     probas_a_priori = 1/3
-    # Somme des similarités pour chaque catégorie limitée aux 50 premiers vecteurs
+    # Sum similarities for each category limited to the top n vectors
     for categorie in categories:
         somme_similarites = df_limited[df_limited['names_normalized'] == categorie]['percentage'].sum()
         probas_a_posteriori[categorie] = somme_similarites * probas_a_priori
-    # Normalisation des probabilités a posteriori
+    # Normalize the posterior probabilities
     total_proba = sum(probas_a_posteriori.values())
     probas_a_posteriori_normalisees = {categorie: (proba / total_proba) for categorie, proba in probas_a_posteriori.items()}
     return probas_a_posteriori_normalisees
- 
 
-#Fonction permettant d'obtenir le nom de l'animal correspondant à chaque vecteur d'audio contenu dans animals.index
 def get_name_from_index(index):
+    """
+    Get the animal name corresponding to a given vector index.
+
+    Parameters:
+    index (int): Index of the vector.
+
+    Returns:
+    str: Name of the animal.
+    """
     return names[index]
 
-#Fonction de normalisation des noms
 def name_normalisation(name):
+    """
+    Normalize animal names.
+
+    This function normalizes the names of animals by categorizing them into common types.
+
+    Parameters:
+    name (str): Name of the animal.
+
+    Returns:
+    str: Normalized animal name.
+    """
     if 'dog' in name:
         return "Chien"
     elif 'cat' in name:
@@ -66,82 +93,138 @@ def name_normalisation(name):
         return "Oiseau"
     else:
         return "Animal non reconnu"
-    
 
-# Définition de la fonction exponentielle négative
 def exp_negative(x):
+    """
+    Define the negative exponential function.
+
+    This function applies the negative exponential transformation to a given value.
+
+    Parameters:
+    x (float): Input value.
+
+    Returns:
+    float: Transformed value.
+    """
     return math.exp(-x)
 
-#Fonction de normalisation des vecteurs
-#j'ai du ajouter un traitement pour les vecteurs 1D car le vecteur de requete contient une seul vecteur et ne peut etre en 2D car comme tu le sais notre processus de traitement des audios nous donne une longue liste contenant tous les caractéritiques dont on a besoin, voila pourquoi le vecteur de requeue est en 1 dimension j'ai donc améliorer la logique de mon code 
 def normalization(embeddings):
-    # Convertir en un tableau NumPy si ce n'est pas déjà le cas
-    #embeddings = np.array(embeddings)
+    """
+    Normalize vectors.
 
-    # Vérifie si embeddings est un vecteur seul (1D) ou une matrice (2D)
+    This function normalizes either a single vector (1D) or a matrix of vectors (2D).
+    If the input is 1D, it normalizes the single vector; if 2D, it normalizes each row.
+
+    Parameters:
+    embeddings (np.ndarray): Input vector or matrix of vectors.
+
+    Returns:
+    np.ndarray: Normalized vector or matrix of vectors.
+    """
+    # Check if embeddings is a single vector (1D) or a matrix (2D)
     if embeddings.ndim == 1:
-        # Normaliser un vecteur seul
+        # Normalize a single vector
         norm = np.linalg.norm(embeddings)
         if norm == 0:
             return embeddings
         return embeddings / norm
     else:
-        # Normaliser chaque ligne d'une matrice
+        # Normalize each row of a matrix
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         return embeddings / norms
-    
-#Fonction pour obtenir les représentations vectorielles des audios
-def get_audio_embedding(audio_path):
-    waveform1, sample_rate1=torchaudio.load(audio_path)
-    waveform1=torchaudio.functional.resample(waveform1, sample_rate1, bundle.sample_rate)
-    with torch.inference_mode():
-            emission1, _ = model(waveform1)
 
-    # Aplatir les deux premières dimensions et garder la troisième
+def get_audio_embedding(audio_path):
+    """
+    Get the audio embedding for a given audio file.
+
+    This function loads the audio file, processes it to obtain the emission,
+    flattens and averages the features, normalizes them, and returns the normalized 2D array.
+
+    Parameters:
+    audio_path (str): Path to the audio file.
+
+    Returns:
+    np.ndarray: Normalized 2D array of audio embedding.
+    """
+    waveform1, sample_rate1 = torchaudio.load(audio_path)
+    waveform1 = torchaudio.functional.resample(waveform1, sample_rate1, bundle.sample_rate)
+    with torch.inference_mode():
+        emission1, _ = model(waveform1)
+
+    # Flatten the first two dimensions and keep the third
     flattened_features1 = emission1.view(-1, emission1.size(2))
     mean_features1 = flattened_features1.mean(dim=0)
-    mean1_array=mean_features1.cpu().numpy().astype(np.float32) 
-    mean1_normal=normalization(mean1_array)
+    mean1_array = mean_features1.cpu().numpy().astype(np.float32) 
+    mean1_normal = normalization(mean1_array)
     mean1_normal_2d = mean1_normal[np.newaxis, :]
     return mean1_normal_2d
 
-#Fonction de recherche dans l'index animals.index afin de renvoyer les vecteurs d'audios les plus similaires aux vecteurs d'audios donné en entrée
 def searchinIndex(index, normal_embedding):
-    D,I= index.search(normal_embedding, index.ntotal)
-    r=pd.DataFrame({'distance':D[0],'index':I[0]})
+    """
+    Search for the closest audio vectors in the animals.index file.
+
+    This function searches the FAISS index for the most similar vectors to the given input embedding.
+
+    Parameters:
+    index (faiss.Index): The FAISS index to search.
+    normal_embedding (np.ndarray): The normalized embedding to search for.
+
+    Returns:
+    pd.DataFrame: DataFrame containing distances and indices of the closest vectors.
+    """
+    D, I = index.search(normal_embedding, index.ntotal)
+    r = pd.DataFrame({'distance': D[0], 'index': I[0]})
     return r
 
-
-#Fonction qui permet la classification des espèces animales
 def animal_classification(audio_path):
-    query_audio = get_audio_embedding(audio_path)  # Obtention de l'embedding audio
-    results = searchinIndex(index, query_audio)  # Recherche dans l'index
-    results['percentage'] = results['distance'].apply(exp_negative) * 100  # Calcul du pourcentage
-    results['names'] = results['index'].apply(get_name_from_index)  # Obtention des noms à partir de l'index
-    results['names_normalized'] = results['names'].apply(name_normalisation)  # Normalisation des noms
+    """
+    Classify the species of animals from an audio file.
+
+    This function extracts the audio embedding, searches the index, calculates similarity percentages,
+    normalizes the names, and applies Bayes' theorem to determine the most likely animal.
+
+    Parameters:
+    audio_path (str): Path to the audio file.
+
+    Returns:
+    str: Formatted result with animal classifications and their probabilities.
+    """
+    query_audio = get_audio_embedding(audio_path)  # Get the audio embedding
+    results = searchinIndex(index, query_audio)  # Search the index
+    results['percentage'] = results['distance'].apply(exp_negative) * 100  # Calculate the percentage
+    results['names'] = results['index'].apply(get_name_from_index)  # Get names from the index
+    results['names_normalized'] = results['names'].apply(name_normalisation)  # Normalize the names
     resultat = bayes_theorem(results, 25)
     formatted_result = '\n'.join([f"{animal}: {percentage:.2%}" for animal, percentage in resultat.items()])
-    # Création d'une chaîne de caractères pour les 3 premiers résultats
     return formatted_result
 
-#Fonction permettant d'ajouter un nouvel audio à l'index pour une meilleure classification
 def add_in_index(audio_path):
-    new_audio=get_audio_embedding(audio_path)
+    """
+    Add a new audio to the index for better classification.
+
+    This function extracts the audio embedding from a new audio file, adds it to the FAISS index,
+    updates the index file, and appends the name to the names list.
+
+    Parameters:
+    audio_path (str): Path to the audio file to be added.
+
+    Returns:
+    str: Confirmation message indicating the addition was successful.
+    """
+    new_audio = get_audio_embedding(audio_path)
     index.add(new_audio)
     faiss.write_index(index, index_path)
     file_name = os.path.basename(audio_path)
     names.append(file_name)
-    result="L'ajout a bien effectué"
+    result = "L'ajout a bien effectué"
     with open(chemin_noms_animaux, 'w') as fichier:
-        # Écrire chaque nom dans le fichier, formaté comme un élément de liste Python
+        # Write each name to the file, formatted as a Python list element
         for nom in names:
             fichier.write(f"'{nom}',\n")
     return result
 
-
-#Création de l'interface graphique utilisé 
+# Create the graphical interface
 interface = gr.Interface(fn=animal_classification, inputs="file", outputs="text")
 
-# Lancez l'interface
+# Launch the interface
 interface.launch()
-
