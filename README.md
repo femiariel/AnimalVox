@@ -1,6 +1,6 @@
 # Projet de classification des Espèces Animales à partir de leur cri
 
-Ce projet utilise la recherche par similarité pour classifier des sons émis par différentes espèces animales. Actuellement, le modèle se concentre sur la distinction entre trois catégories principales : les chiens, les chats, et les oiseaux. Le but est de permettre une identification rapide et précise de l'espèce à partir d'un enregistrement audio, ce qui peut être utile pour des applications écologiques, éducatives, ou de loisir.
+Ce projet utilise la recherche par similarité pour classifier des sons émis par différentes espèces animales. Actuellement, le projet se concentre sur la distinction entre trois catégories principales : les chiens, les chats, et les oiseaux. Le but est de permettre une identification rapide et précise de l'espèce à partir d'un enregistrement audio, ce qui peut être utile pour des applications écologiques, éducatives, ou de loisir.
 
 
 ## Installation
@@ -18,7 +18,7 @@ conda activate env_name
 ```
 
 Naviguez jusque dans le dossier du projet.
-Vous pouvez installer les dépendances nécessaires à la bonne exécution du projet via pip en exécutant :
+Installer les dépendances nécessaires à la bonne exécution du projet via pip en exécutant :
 
 ```
 pip install -r requirements.txt
@@ -39,7 +39,7 @@ Le système vous retournera la classification de l'espèce avec la probabilité 
 
 ### Ajout de Nouveaux Sons
 
-Pour ajouter un nouveau son à la base de données :
+Pour ajouter un nouveau son à la base de données dans le cas ou le cri animal n'est pas correctement classé:
 1. Utilisez le  fichier `add_index` en executant la commande:
 ```
 python add_index.py  chemin_de_l_audio_à_ajouter
