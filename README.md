@@ -47,14 +47,10 @@ python add_index.py  chemin_de_l_audio_à_ajouter
 2. Le script mettra à jour l'index et la liste des noms d'animau
 
 
-## Explication des différentes fonctions 
-Il y a deux fonctions principales dans ce script, la fonction animal_classification et la fonction add_in_index.
+## Explication de fonctions 
+Il y a deux fonctions principales dans ce script la fonction add_in_index.
 La fonction animal_classification est la fonction de classification des animaux à partir des sons. Elle prend en paramètre un audio au format .wav .
-Pour l'utiliser , executez la commande suivante:
-```
-python animal_classification.py  chemin_de_l_audio_à_ajouter
-```
-La fonction add_in_index est la fonction qui permet d'ajouter un nouveau son à la base de données afin d'améliorer la qualité de notre qualification.
+La fonction add_in_index est la fonction qui permet d'ajouter un nouveau son à la base de données afin d'améliorer la qualité de notre classification .
 Pour l'utiliser , executez la commande suivante:
 ```
 python add_index.py "chemin_de_l_audio_à_ajouter"
